@@ -94,6 +94,10 @@ const verifyDevice = async (req, res, next) => {
 app.use('/api/v1/gate-entries', verifyDevice);
 app.use('/api/v1/paddy', verifyDevice);
 
+app.get('/', (req, res) => {
+  res.json({ success: true, message: 'Paddy Moisture Detector Backend API is Live!' });
+});
+
 // ══════════════════════════════════════════════════════
 // API ROUTES
 // ══════════════════════════════════════════════════════
