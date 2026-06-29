@@ -312,6 +312,9 @@ app.delete('/api/v1/admin/gate-entries/:gateEntryNo', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Moisture Collector Backend API running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Moisture Collector Backend API running on port ${PORT}`);
+  });
+}
+module.exports = app;
