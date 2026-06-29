@@ -125,18 +125,24 @@ app.get('/api/v1/gate-entries/paddy-only', async (req, res) => {
         ];
       }
     }
-    // Filter out completed and locked shipments
-    const activeLocks = await Lock.find({}, 'gateEntryNo');
+    // Find all active locks and completed submissions
+    const activeLocks = await Lock.find({});
     const completedSubmissions = await Submission.find({}, 'gateEntryNo');
 
-    const lockedSet = new Set(activeLocks.map(l => l.gateEntryNo));
+    const lockMap = new Map(activeLocks.map(l => [l.gateEntryNo, l.operatorName]));
     const completedSet = new Set(completedSubmissions.map(s => s.gateEntryNo));
 
-    const availableEntries = entries.filter(e => 
-      !lockedSet.has(e.gateEntryNo) && !completedSet.has(e.gateEntryNo)
-    );
+    const finalEntries = entries
+      .filter(e => !completedSet.has(e.gateEntryNo))
+      .map(e => ({
+        gateEntryNo: e.gateEntryNo,
+        vehicleNo: e.vehicleNo,
+        productName: e.productName,
+        status: lockMap.has(e.gateEntryNo) ? 'LOCKED' : 'FREE',
+        lockedBy: lockMap.get(e.gateEntryNo) || null
+      }));
 
-    res.json(availableEntries);
+    res.json(finalEntries);
   } catch (err) {
     console.error('Error fetching shipments:', err.message);
     res.status(500).json({ error: 'Failed to retrieve shipments' });
