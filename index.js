@@ -108,21 +108,11 @@ app.get('/api/v1/gate-entries/paddy-only', async (req, res) => {
     } else {
       // Pull from our custom Database-driven Vehicles collection if populated
       const dbVehicles = await Vehicle.find({});
-      if (dbVehicles.length > 0) {
-        entries = dbVehicles.map(v => ({
-          gateEntryNo: v.gateEntryNo,
-          vehicleNo: v.vehicleNo,
-          productName: v.productName
-        }));
-      } else {
-        // Fallback to default mock data for out-of-the-box local testing
-        entries = [
-          { gateEntryNo: 'GE/2026/00101', vehicleNo: 'PB-65-AT-4392', productName: 'Paddy (Whole)' },
-          { gateEntryNo: 'GE/2026/00102', vehicleNo: 'HR-55-XY-8822', productName: 'Paddy (Whole)' },
-          { gateEntryNo: 'GE/2026/00103', vehicleNo: 'DL-01-AB-1234', productName: 'Paddy (Ground)' },
-          { gateEntryNo: 'GE/2026/00104', vehicleNo: 'UP-16-CD-5678', productName: 'Paddy (Whole)' }
-        ];
-      }
+      entries = dbVehicles.map(v => ({
+        gateEntryNo: v.gateEntryNo,
+        vehicleNo: v.vehicleNo,
+        productName: v.productName
+      }));
     }
     // Find all active locks and completed submissions
     const activeLocks = await Lock.find({});
