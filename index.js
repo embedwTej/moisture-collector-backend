@@ -13,10 +13,31 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/moistu
 const VENDOR_API_URL = process.env.VENDOR_API_URL || '';
 const SAP_API_URL = process.env.SAP_API_URL || '';
 
-// Connect to MongoDB
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB database'))
-  .catch(err => console.error('MongoDB database connection error:', err));
+// Cached MongoDB connection for Vercel serverless (survives warm invocations)
+let cachedDb = null;
+async function connectToDatabase() {
+  if (cachedDb && mongoose.connection.readyState === 1) {
+    return cachedDb;
+  }
+  cachedDb = await mongoose.connect(MONGODB_URI, {
+    bufferCommands: false,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+  });
+  console.log('Connected to MongoDB database');
+  return cachedDb;
+}
+
+// Middleware: ensure DB is connected before every request
+app.use(async (req, res, next) => {
+  try {
+    await connectToDatabase();
+    next();
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    res.status(503).json({ success: false, error: 'Database unavailable. Please retry.' });
+  }
+});
 
 // ══════════════════════════════════════════════════════
 // DATABASE SCHEMAS & MODELS
