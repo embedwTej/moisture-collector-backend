@@ -51,6 +51,15 @@ const SubmissionSchema = new mongoose.Schema({
 });
 const Submission = mongoose.model('Submission', SubmissionSchema);
 
+// 4. Active Vehicles (Dynamic gate entries populated via admin utility)
+const VehicleSchema = new mongoose.Schema({
+  gateEntryNo: { type: String, unique: true, required: true },
+  vehicleNo: { type: String, required: true },
+  productName: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now }
+});
+const Vehicle = mongoose.model('Vehicle', VehicleSchema);
+
 // ══════════════════════════════════════════════════════
 // MIDDLEWARE FOR SECURITY
 // ══════════════════════════════════════════════════════
@@ -93,22 +102,29 @@ app.use('/api/v1/paddy', verifyDevice);
 // 1. Fetch Active Paddy Shipments
 app.get('/api/v1/gate-entries/paddy-only', async (req, res) => {
   try {
-    let entries = [];
-
-    // Pull from Vendor API if configured
+    let entries = [];    // Pull from Vendor API if configured
     if (VENDOR_API_URL) {
       const response = await axios.get(VENDOR_API_URL);
       entries = response.data;
     } else {
-      // Return mock data for out-of-the-box local testing
-      entries = [
-        { gateEntryNo: 'GE/2026/00101', vehicleNo: 'PB-65-AT-4392', productName: 'Paddy (Whole)' },
-        { gateEntryNo: 'GE/2026/00102', vehicleNo: 'HR-55-XY-8822', productName: 'Paddy (Whole)' },
-        { gateEntryNo: 'GE/2026/00103', vehicleNo: 'DL-01-AB-1234', productName: 'Paddy (Ground)' },
-        { gateEntryNo: 'GE/2026/00104', vehicleNo: 'UP-16-CD-5678', productName: 'Paddy (Whole)' }
-      ];
+      // Pull from our custom Database-driven Vehicles collection if populated
+      const dbVehicles = await Vehicle.find({});
+      if (dbVehicles.length > 0) {
+        entries = dbVehicles.map(v => ({
+          gateEntryNo: v.gateEntryNo,
+          vehicleNo: v.vehicleNo,
+          productName: v.productName
+        }));
+      } else {
+        // Fallback to default mock data for out-of-the-box local testing
+        entries = [
+          { gateEntryNo: 'GE/2026/00101', vehicleNo: 'PB-65-AT-4392', productName: 'Paddy (Whole)' },
+          { gateEntryNo: 'GE/2026/00102', vehicleNo: 'HR-55-XY-8822', productName: 'Paddy (Whole)' },
+          { gateEntryNo: 'GE/2026/00103', vehicleNo: 'DL-01-AB-1234', productName: 'Paddy (Ground)' },
+          { gateEntryNo: 'GE/2026/00104', vehicleNo: 'UP-16-CD-5678', productName: 'Paddy (Whole)' }
+        ];
+      }
     }
-
     // Filter out completed and locked shipments
     const activeLocks = await Lock.find({}, 'gateEntryNo');
     const completedSubmissions = await Submission.find({}, 'gateEntryNo');
@@ -256,7 +272,46 @@ app.delete('/api/v1/admin/devices/:deviceId', async (req, res) => {
   }
 });
 
-// Start listening
+// Add a vehicle gate entry (used by the admin utility to push vehicle data)
+app.post('/api/v1/admin/gate-entries', async (req, res) => {
+  const { gateEntryNo, vehicleNo, productName } = req.body;
+  if (!gateEntryNo || !vehicleNo || !productName) {
+    return res.status(400).json({ success: false, message: 'Missing gateEntryNo, vehicleNo, or productName' });
+  }
+
+  try {
+    const vehicle = await Vehicle.create({ gateEntryNo, vehicleNo, productName });
+    res.json({ success: true, vehicle });
+  } catch (err) {
+    if (err.code === 11000) {
+      res.status(409).json({ success: false, message: 'Gate Entry Number already exists' });
+    } else {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+});
+
+// View all vehicle gate entries
+app.get('/api/v1/admin/gate-entries', async (req, res) => {
+  try {
+    const vehicles = await Vehicle.find({}).sort({ createdAt: -1 });
+    res.json(vehicles);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Remove a vehicle gate entry
+app.delete('/api/v1/admin/gate-entries/:gateEntryNo', async (req, res) => {
+  const { gateEntryNo } = req.params;
+  try {
+    await Vehicle.findOneAndDelete({ gateEntryNo });
+    res.json({ success: true, message: 'Vehicle entry removed' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Moisture Collector Backend API running on port ${PORT}`);
 });
