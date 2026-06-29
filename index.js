@@ -128,18 +128,22 @@ app.get('/api/v1/gate-entries/paddy-only', async (req, res) => {
     const activeLocks = await Lock.find({});
     const completedSubmissions = await Submission.find({}, 'gateEntryNo');
 
-    const lockMap = new Map(activeLocks.map(l => [l.gateEntryNo, l.operatorName]));
+    const lockMap = new Map(activeLocks.map(l => [l.gateEntryNo, { operatorName: l.operatorName, deviceId: l.deviceId }]));
     const completedSet = new Set(completedSubmissions.map(s => s.gateEntryNo));
 
     const finalEntries = entries
       .filter(e => !completedSet.has(e.gateEntryNo))
-      .map(e => ({
-        gateEntryNo: e.gateEntryNo,
-        vehicleNo: e.vehicleNo,
-        productName: e.productName,
-        status: lockMap.has(e.gateEntryNo) ? 'LOCKED' : 'FREE',
-        lockedBy: lockMap.get(e.gateEntryNo) || null
-      }));
+      .map(e => {
+        const lockInfo = lockMap.get(e.gateEntryNo);
+        return {
+          gateEntryNo: e.gateEntryNo,
+          vehicleNo: e.vehicleNo,
+          productName: e.productName,
+          status: lockInfo ? 'LOCKED' : 'FREE',
+          lockedBy: lockInfo ? lockInfo.operatorName : null,
+          lockedByDeviceId: lockInfo ? lockInfo.deviceId : null
+        };
+      });
 
     res.json(finalEntries);
   } catch (err) {
@@ -162,9 +166,14 @@ app.post('/api/v1/gate-entries/:gateEntryNo/lock', async (req, res) => {
     await Lock.create({ gateEntryNo, deviceId, operatorName });
     res.json({ success: true, message: 'Lock acquired' });
   } catch (err) {
-    // Duplicate key means vehicle is already locked
     if (err.code === 11000) {
       const existing = await Lock.findOne({ gateEntryNo });
+      if (existing && existing.deviceId === deviceId) {
+        existing.operatorName = operatorName;
+        existing.createdAt = new Date();
+        await existing.save();
+        return res.json({ success: true, message: 'Lock renewed/re-acquired by same device' });
+      }
       const holder = existing ? existing.operatorName : 'another operator';
       res.status(409).json({
         success: false,
