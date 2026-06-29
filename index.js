@@ -68,7 +68,7 @@ const SubmissionSchema = new mongoose.Schema({
   averageMoisture: { type: Number, required: true },
   operatorName: { type: String, required: true },
   submittedByDevice: { type: String, required: true },
-  submittedAt: { type: Date, default: Date.now }
+  submittedAt: { type: String, default: () => new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) }
 });
 const Submission = mongoose.model('Submission', SubmissionSchema);
 // 4. Active Vehicles (Dynamic gate entries populated via admin utility)
@@ -76,7 +76,7 @@ const VehicleSchema = new mongoose.Schema({
   gateEntryNo: { type: String, unique: true, required: true },
   vehicleNo: { type: String, required: true },
   productName: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: String, default: () => new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) }
 });
 const Vehicle = mongoose.model('Vehicle', VehicleSchema);
 
