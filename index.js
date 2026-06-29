@@ -39,18 +39,17 @@ const LockSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now, expires: 600 } // TTL index
 });
 const Lock = mongoose.model('Lock', LockSchema);
-
 // 3. Completed Submissions (Audit Log)
 const SubmissionSchema = new mongoose.Schema({
   gateEntryNo: { type: String, unique: true, required: true },
   vehicleNo: { type: String, required: true },
+  productName: { type: String, required: true },
   averageMoisture: { type: Number, required: true },
-  referenceId: { type: String, required: true },
+  operatorName: { type: String, required: true },
   submittedByDevice: { type: String, required: true },
   submittedAt: { type: Date, default: Date.now }
 });
 const Submission = mongoose.model('Submission', SubmissionSchema);
-
 // 4. Active Vehicles (Dynamic gate entries populated via admin utility)
 const VehicleSchema = new mongoose.Schema({
   gateEntryNo: { type: String, unique: true, required: true },
@@ -195,12 +194,12 @@ app.delete('/api/v1/gate-entries/:gateEntryNo/lock', async (req, res) => {
   }
 });
 
-// 4. Submit Moisture Report to SAP
+// 4. Submit Moisture Report
 app.post('/api/v1/paddy/submit-moisture', async (req, res) => {
-  const { gateEntryNo, vehicleNo, averageMoisture } = req.body;
+  const { gateEntryNo, vehicleNo, productName, averageMoisture, operatorName } = req.body;
 
-  if (!gateEntryNo || !vehicleNo || !averageMoisture) {
-    return res.status(400).json({ success: false, message: 'Missing report data' });
+  if (!gateEntryNo || !vehicleNo || !productName || !averageMoisture || !operatorName) {
+    return res.status(400).json({ success: false, message: 'Missing report data (gateEntryNo, vehicleNo, productName, averageMoisture, or operatorName)' });
   }
 
   try {
@@ -210,38 +209,34 @@ app.post('/api/v1/paddy/submit-moisture', async (req, res) => {
       return res.status(400).json({ success: false, message: 'This shipment has already been completed.' });
     }
 
-    const referenceId = 'MCL-REF-' + Math.floor(100000 + Math.random() * 900000);
-
     // Save to Database (Audit Log)
     await Submission.create({
       gateEntryNo,
       vehicleNo,
+      productName,
       averageMoisture,
-      referenceId,
+      operatorName,
       submittedByDevice: req.deviceId
     });
 
     // Remove lock
     await Lock.findOneAndDelete({ gateEntryNo });
 
-    // Sync to external SAP system if configured
+    // Sync to external SAP system if configured (sends only gateEntryNo, vehicleNo, and averageMoisture)
     if (SAP_API_URL) {
       try {
-        await axios.post(SAP_API_URL, { gateEntryNo, vehicleNo, averageMoisture, referenceId });
+        await axios.post(SAP_API_URL, { gateEntryNo, vehicleNo, averageMoisture });
       } catch (sapErr) {
         console.error('Failed to sync to SAP directly:', sapErr.message);
-        // We still return success: true because it is safely logged in our database,
-        // and a sync retry worker can push it later.
       }
     }
 
-    res.json({ success: true, message: 'Submission successful', referenceId });
+    res.json({ success: true, message: 'Submission successful' });
   } catch (err) {
     console.error('Error submitting report:', err.message);
     res.status(500).json({ success: false, message: 'Server error registering report' });
   }
 });
-
 // ══════════════════════════════════════════════════════
 // ADMIN ENDPOINTS (To manage authorized devices)
 // ══════════════════════════════════════════════════════
